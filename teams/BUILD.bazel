@@ -1,0 +1,84 @@
+# ==============================================================================
+# Team Topologies visibility boundaries
+# ==============================================================================
+# Every target in this monorepo is consumed through one of these package
+# groups. There is exactly one canonical team package (`//teams`, previously
+# duplicated by a `//team` package that has been removed).
+#
+# Visibility conventions:
+#   //teams:public    - a platform capability or shared library, readable by
+#                       every team. Keep this surface small and stable.
+#   //teams:<team>    - internal to one stream-aligned team.
+#   //teams:platform  - the platform team, which may read and write everything.
+# ==============================================================================
+
+package(default_visibility = ["//visibility:public"])
+
+# Every package in the repository. Used where "no restriction" is genuinely
+# intended, e.g. aggregate targets.
+package_group(
+    name = "all",
+    packages = ["//..."],
+)
+
+package_group(
+    name = "public",
+    packages = ["//..."],
+)
+
+# -----------------------------------------------------------------------------
+# Stream-aligned teams
+# -----------------------------------------------------------------------------
+# Packages listed here that do not exist yet are intentional: the boundary is
+# declared up front so that a new service inherits its team's visibility without
+# anyone having to relax a package_group later.
+
+package_group(
+    name = "commerce",
+    packages = [
+        "//services/commerce/...",
+        "//teams/commerce/...",
+    ],
+)
+
+package_group(
+    name = "identity",
+    packages = [
+        "//services/identity/...",
+        "//teams/identity/...",
+    ],
+)
+
+package_group(
+    name = "fulfillment",
+    packages = [
+        "//services/fulfillment/...",
+        "//teams/fulfillment/...",
+    ],
+)
+
+package_group(
+    name = "notification",
+    packages = [
+        "//services/notification/...",
+        "//teams/notification/...",
+    ],
+)
+
+package_group(
+    name = "analytics",
+    packages = [
+        "//services/analytics/...",
+        "//teams/analytics/...",
+    ],
+)
+
+# -----------------------------------------------------------------------------
+# Platform team
+# -----------------------------------------------------------------------------
+# Full access: the platform team owns //platform, //libs and //build, and must be
+# able to reach every package.
+package_group(
+    name = "platform",
+    packages = ["//..."],
+)

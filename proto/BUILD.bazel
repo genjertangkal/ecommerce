@@ -1,0 +1,32 @@
+# ==============================================================================
+# Shared protocol buffer definitions
+# ==============================================================================
+# These are the only cross-team contract surface. Services depend on generated
+# code from here, never on each other's implementation packages (enforced by
+# //bazel/aspects:aspects.bzl%service_isolation_aspect).
+
+package_group(
+    name = "all",
+    packages = [
+        "//proto/common",
+        "//proto/contracts",
+    ],
+)
+
+# Aggregate: every generated Go binding in one label.
+#
+# `visibility` is explicit because `package()` defaults are NOT inherited, so
+# without it this filegroup is //visibility:private and no service can consume
+# the contract through it.
+filegroup(
+    name = "go_protos",
+    srcs = [
+        "//proto/common:common_go_proto",
+        "//proto/contracts:contracts_go_proto",
+    ],
+    tags = [
+        "language=go",
+        "type=proto",
+    ],
+    visibility = ["//teams:public"],
+)

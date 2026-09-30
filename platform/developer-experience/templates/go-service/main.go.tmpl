@@ -1,0 +1,100 @@
+// {{.ServiceName}} - {{.Description}}
+//
+// Scaffolding template. The service lives inside the monorepo, so there is no
+// separate go.mod: the repository root module is `github.com/ecommerce` and
+// Gazelle maps imports to Bazel labels automatically.
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/ecommerce/libs/go/logging"
+	platformauth "github.com/ecommerce/platform/security/auth"
+	obslogging "github.com/ecommerce/platform/observability/logging"
+)
+
+const (
+	serviceName = "{{.ServiceName}}"
+	addr        = ":8080"
+	// shutdownGrace bounds how long in-flight requests get after a signal.
+	shutdownGrace = 15 * time.Second
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// libs/go/logging owns process-wide structured logging; the platform
+	// observability capability is used per request, where an explicit writer and
+	// context are available.
+	logger := logging.NewLogger(logging.Config{
+		Level:   logging.LevelInfo,
+		Service: serviceName,
+	})
+	defer func() { _ = logger.Sync() }()
+
+	requestLogger := obslogging.NewLogger(serviceName, obslogging.LevelInfo)
+
+	validator, err := platformauth.NewValidator(platformauth.AuthConfig{
+		Providers: []platformauth.AuthProvider{
+			platformauth.ProviderOAuth2,
+			platformauth.ProviderAPIKey,
+		},
+		JWTAlg: "RS256",
+	})
+	if err != nil {
+		// Fail at startup rather than serving unauthenticated traffic.
+		logger.Error("auth configuration invalid", "error", err.Error())
+		os.Exit(1)
+	}
+
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           newMux(requestLogger, validator),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	go func() {
+		<-ctx.Done()
+		logger.Info("shutting down")
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			logger.Error("graceful shutdown failed", "error", err.Error())
+		}
+	}()
+
+	logger.Info("starting server", "addr", addr)
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logger.Error("server error", "error", err.Error())
+		os.Exit(1)
+	}
+	logger.Info("server stopped")
+}
+
+func newMux(logger *obslogging.Logger, validator *platformauth.Validator) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": serviceName})
+	})
+	_ = logger
+	_ = validator
+	return mux
+}
+
+func writeJSON(w http.ResponseWriter, status int, body interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+var _ = fmt.Sprintf

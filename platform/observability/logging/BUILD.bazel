@@ -1,0 +1,37 @@
+# ==============================================================================
+# Logging capability
+# ==============================================================================
+# `go_lib` with the capability tags spelled out, rather than the `logging_lib`
+# macro. The macro expands to exactly this target - same rule, same importpath,
+# same visibility, same tags - so nothing observable changes, and every check in
+# //bazel/aspects:aspects.bzl keys on the tags, not on the rule kind.
+#
+# The reason to spell them out is Gazelle. `logging_lib` cannot be indexed:
+# `config.KindMap` is keyed by the builtin kind, so only one macro name per
+# builtin is resolvable, and `logging_lib` would have to displace `go_lib` from
+# the index. Gazelle can then no longer map an import of this package to a
+# label, so in every managed package it silently deletes the `deps` entry and
+# shells out to `go` (which needs the network). See the Gazelle section in
+# //BUILD.bazel; `logging_lib` survives there for `# gazelle:ignore`d packages.
+# ==============================================================================
+
+load("//build:macros.bzl", "go_lib", "go_test_lib")
+
+go_lib(
+    name = "logging",
+    srcs = ["logging.go"],
+    importpath = "github.com/ecommerce/platform/observability/logging",
+    tags = [
+        "capability=logging",
+        "layer=platform",
+        "severity=INFO",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+go_test_lib(
+    name = "logging_test",
+    size = "small",
+    srcs = ["logging_test.go"],
+    embed = [":logging"],
+)

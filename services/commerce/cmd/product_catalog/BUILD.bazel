@@ -1,0 +1,59 @@
+# gazelle:ignore
+
+# ==============================================================================
+# Product Catalog binary
+# ==============================================================================
+# The binary lives in its own Bazel package because it is a Go package of its
+# own (`package main`) under its own import path. Keeping the go_binary here
+# also means the composition root, the layers it wires and the layers'
+# visibility are all independently reviewable.
+#
+# Note: this file's srcs must not be referenced from //services/commerce. A
+# BUILD file makes a directory a separate Bazel package, so the parent cannot
+# glob across into it.
+#
+# `# gazelle:ignore` is required, not optional. Gazelle's model for a
+# `package main` directory is a `go_binary` that *embeds* a `go_library` which
+# holds the sources - see `generateLib`/`isCommand` in
+# gazelle/language/go/generate.go. So on every run Gazelle split this file into a
+# `go_lib` plus a `go_bin` embedding it, which two targets in one Bazel package
+# may not do with the same Go import path. It also rewrote the load to
+# `load("@rules_go//go:def.bzl", "go_bin")` - a symbol rules_go does not export -
+# so the package stopped loading altogether.
+#
+# The service tags are spelled out rather than using the `go_service` macro. The
+# macro expands to this target plus a conditional `name_test` when `test_srcs` is
+# given; that second target is invisible to Gazelle, which is what triggered the
+# rewriting above. `go_service` also cannot be indexed, since `config.KindMap` is
+# keyed by the builtin kind and only one macro name per builtin is resolvable.
+# See the Gazelle section in //BUILD.bazel.
+#
+# This package has no test sources, so no test target is created for it. Add
+# `product_catalog_test.go` and a `go_test_lib` beside it when it grows one.
+# ==============================================================================
+
+load("//build:macros.bzl", "go_bin")
+
+package(default_applicable_licenses = ["//:license"])
+
+go_bin(
+    name = "product_catalog",
+    srcs = ["main.go"],
+    importpath = "github.com/ecommerce/services/commerce/cmd/product_catalog",
+    deps = [
+        "//libs/go/logging",
+        "//platform/observability/logging",
+        "//services/commerce/internal/handler",
+        "//services/commerce/internal/service",
+        "//services/commerce/internal/store",
+    ],
+    tags = [
+        "service=product-catalog",
+        "team=commerce",
+        "type=service",
+    ],
+    visibility = [
+        "//teams:commerce",
+        "//teams:platform",
+    ],
+)

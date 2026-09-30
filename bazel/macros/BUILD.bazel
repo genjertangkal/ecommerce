@@ -1,0 +1,9 @@
+# ==============================================================================
+# Deprecated macro location
+# ==============================================================================
+# macros.bzl re-exports //build:macros.bzl. Load //build:macros.bzl directly in
+# new code; see bazel/macros/macros.bzl for why this indirection exists.
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["macros.bzl"])

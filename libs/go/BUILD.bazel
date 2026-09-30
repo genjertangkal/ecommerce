@@ -1,0 +1,34 @@
+# ==============================================================================
+# Reusable technical libraries
+# ==============================================================================
+# These are technical utilities, not business capabilities. A library belongs
+# here only if it encodes no domain knowledge; domain logic belongs with the
+# owning team under //services.
+
+package_group(
+    name = "all",
+    packages = [
+        "//libs/go/errors",
+        "//libs/go/http",
+        "//libs/go/logging",
+    ],
+)
+
+# Aggregate: every shared library in one label.
+#
+# `visibility` is explicit because `package()` defaults are NOT inherited, so
+# without it this filegroup is //visibility:private and the label is useless to
+# the teams it exists for.
+filegroup(
+    name = "libraries",
+    srcs = [
+        "//libs/go/errors",
+        "//libs/go/http",
+        "//libs/go/logging",
+    ],
+    tags = [
+        "language=go",
+        "type=utility",
+    ],
+    visibility = ["//teams:public"],
+)

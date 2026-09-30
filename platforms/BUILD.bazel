@@ -1,0 +1,149 @@
+# ==============================================================================
+# Platform definitions for cross-compilation
+# ==============================================================================
+# A `platform()` here describes what a build *for* that platform produces. It is
+# selected with `--platforms` (see the `cross_*` configs in .bazelrc), and it is
+# deliberately NOT set by default: forcing `--platforms` on a local build makes
+# every tool (protoc, the Go SDK) build for a non-host platform and slows the
+# edit-build-test loop down for no benefit.
+#
+# For *execution* platforms (where actions run) see //toolchains, which is what
+# the `linux` / `macos` / `windows` configs register via
+# --extra_execution_platforms.
+# ==============================================================================
+
+package(default_applicable_licenses = ["//:license"])
+
+# -----------------------------------------------------------------------------
+# Linux
+# -----------------------------------------------------------------------------
+platform(
+    name = "linux_x86_64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    exec_properties = {
+        "container-image": "docker://golang:1.23-alpine",
+        "OSFamily": "linux",
+    },
+)
+
+platform(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+    ],
+    exec_properties = {
+        "container-image": "docker://golang:1.23-alpine",
+        "OSFamily": "linux",
+    },
+)
+
+# -----------------------------------------------------------------------------
+# macOS
+# -----------------------------------------------------------------------------
+platform(
+    name = "macos_arm64",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:arm64",
+    ],
+    exec_properties = {
+        "container-image": "docker://golang:1.23-alpine",
+        "OSFamily": "darwin",
+    },
+)
+
+platform(
+    name = "macos_x86_64",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:x86_64",
+    ],
+    exec_properties = {
+        "container-image": "docker://golang:1.23-alpine",
+        "OSFamily": "darwin",
+    },
+)
+
+# -----------------------------------------------------------------------------
+# Windows
+# -----------------------------------------------------------------------------
+platform(
+    name = "windows_x86_64",
+    constraint_values = [
+        "@platforms//os:windows",
+        "@platforms//cpu:x86_64",
+    ],
+    exec_properties = {
+        "container-image": "docker://golang:1.23-alpine",
+        "OSFamily": "windows",
+    },
+)
+
+# -----------------------------------------------------------------------------
+# Remote execution
+# -----------------------------------------------------------------------------
+# These extend the local platforms with scheduling hints. They are only
+# meaningful under a remote executor, so they are not registered as
+# --extra_execution_platforms by default.
+platform(
+    name = "remote_linux_x86_64",
+    exec_properties = {
+        "Pool": "default",
+        "dockerNetwork": "standard",
+        "container-image": "docker://golang:1.23-alpine",
+    },
+    parents = [":linux_x86_64"],
+)
+
+platform(
+    name = "remote_linux_arm64",
+    exec_properties = {
+        "Pool": "default",
+        "dockerNetwork": "standard",
+        "container-image": "docker://golang:1.23-alpine",
+    },
+    parents = [":linux_arm64"],
+)
+
+# -----------------------------------------------------------------------------
+# Go language version
+# -----------------------------------------------------------------------------
+# Declared so that a target can require a minimum Go language version without
+# being pinned to a particular SDK:
+#
+#     select({
+#         "//platforms:go_version": "//platforms:go_1_23",
+#         "//conditions:default": "//platforms:go_1_22",
+#     })
+#
+# No platform below constrains this setting, so nothing in the repository
+# selects it yet; it is here as the extension point. The SDK version itself is
+# pinned in MODULE.bazel through the `go_sdk` module extension, which is the
+# stronger guarantee because it fixes the toolchain rather than describing a
+# preference. If the go_version setting ever becomes load-bearing, that comment
+# stops being true and the pin should be revisited.
+constraint_setting(name = "go_version")
+
+constraint_value(
+    name = "go_1_22",
+    constraint_setting = ":go_version",
+)
+
+constraint_value(
+    name = "go_1_23",
+    constraint_setting = ":go_version",
+)
+
+# Note: there is deliberately no `default_platform` alias and no
+# `--extra_target_platforms` anywhere in .bazelrc. An alias here used to claim to
+# be "the default target platform ... so that a host that matches nothing still
+# resolves the Go toolchain", but no config referenced it, so it resolved
+# nothing. Toolchain resolution for Go comes from the `go_sdk` module extension
+# in MODULE.bazel, which registers its own toolchain; a target platform alias
+# cannot do that job. If a genuine fallback is ever needed, the mechanism is
+# --extra_target_platforms pointed at a real platform(), and the alias has to be
+# referenced by that flag to do anything.

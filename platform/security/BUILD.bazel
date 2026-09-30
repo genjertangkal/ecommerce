@@ -1,0 +1,39 @@
+# ==============================================================================
+# Security platform capability (X-as-a-Service)
+# ==============================================================================
+# One Go package per capability. Three go_library targets in a single Bazel
+# package would all derive the same Go import path and be rejected by rules_go.
+# ==============================================================================
+
+load("//build:macros.bzl", "config_struct", "filegroup_lib")
+
+package(default_applicable_licenses = ["//:license"])
+
+package_group(
+    name = "capabilities",
+    packages = ["//platform/security/..."],
+)
+
+filegroup_lib(
+    name = "security",
+    srcs = [
+        "//platform/security/auth",
+        "//platform/security/policy",
+        "//platform/security/secrets",
+    ],
+    tags = [
+        "capability=auth",
+        "capability=policy",
+        "capability=secrets",
+        # Consumable by every team; see the note in //platform/observability.
+        "layer=platform",
+    ],
+)
+
+config_struct(
+    name = "config",
+    tags = [
+        "enable_audit_logging=true",
+        "environment=production",
+    ],
+)

@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package ecommerce.services.commerce;
+
+import "common/common.proto";
+import "contracts/contracts.proto";
+
+// Product Catalog Service API
+//
+// Cross-package type references must match the package that *declares* the
+// message, not the package that merely re-exports it:
+//
+//   contracts.Product, contracts.Price, contracts.Inventory
+//       -> declared in ecommerce.contracts (contracts.proto)
+//   common.Metadata, common.PaginationRequest, common.PaginationResponse
+//       -> declared in ecommerce.common (common.proto)
+//
+// The request/response messages below are declared in this file so that the
+// service's wire format is owned by the service, while the domain types it
+// carries stay shared.
+
+// ProductCatalog exposes the product catalogue.
+//
+// The implementation currently serves this contract over HTTP/JSON rather than
+// gRPC: go.mod carries no third-party dependencies yet, so there is no gRPC
+// runtime. The message shapes are kept gRPC-compatible so that adding one is
+// additive rather than a breaking change.
+service ProductCatalog {
+  // GetProduct returns a product by ID.
+  rpc GetProduct(GetProductRequest) returns (GetProductResponse);
+
+  // ListProducts returns a paginated list of products.
+  rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
+
+  // CreateProduct creates a new product (admin only).
+  rpc CreateProduct(CreateProductRequest) returns (CreateProductResponse);
+
+  // UpdateProduct updates an existing product (admin only).
+  rpc UpdateProduct(UpdateProductRequest) returns (UpdateProductResponse);
+
+  // DeleteProduct deletes a product (admin only).
+  rpc DeleteProduct(DeleteProductRequest) returns (DeleteProductResponse);
+}
+
+// GetProductRequest is a request to get a product.
+message GetProductRequest {
+  string product_id = 1;
+  common.Metadata metadata = 2;
+}
+
+// GetProductResponse is a product response.
+message GetProductResponse {
+  contracts.Product product = 1;
+  common.Metadata metadata = 2;
+}
+
+// ListProductsRequest is a request to list products.
+message ListProductsRequest {
+  common.PaginationRequest pagination = 1;
+  string category = 2;
+  string query = 3;
+  common.Metadata metadata = 4;
+}
+
+// ListProductsResponse is a product list response.
+message ListProductsResponse {
+  repeated contracts.Product products = 1;
+  common.PaginationResponse pagination = 2;
+  common.Metadata metadata = 3;
+}
+
+// CreateProductRequest is a request to create a product.
+message CreateProductRequest {
+  contracts.Product product = 1;
+  common.Metadata metadata = 2;
+}
+
+// CreateProductResponse is a product creation response.
+message CreateProductResponse {
+  contracts.Product product = 1;
+  common.Metadata metadata = 2;
+}
+
+// UpdateProductRequest is a request to update a product.
+message UpdateProductRequest {
+  string product_id = 1;
+  contracts.Product product = 2;
+  common.Metadata metadata = 3;
+}
+
+// UpdateProductResponse is a product update response.
+message UpdateProductResponse {
+  contracts.Product product = 1;
+  common.Metadata metadata = 2;
+}
+
+// DeleteProductRequest is a request to delete a product.
+message DeleteProductRequest {
+  string product_id = 1;
+  common.Metadata metadata = 2;
+}
+
+// DeleteProductResponse is a product deletion response.
+message DeleteProductResponse {
+  bool success = 1;
+  common.Metadata metadata = 2;
+}

@@ -1,0 +1,69 @@
+# ==============================================================================
+# Execution platforms
+# ==============================================================================
+# Where actions *run*. These are registered with --extra_execution_platforms by
+# the `linux` / `macos` / `windows` configs in .bazelrc, which is what lets
+# remote execution schedule work without changing the target platform.
+#
+# They are kept separate from //platforms on purpose: a target platform says
+# what you are building for, an execution platform says where it is built.
+# Conflating the two is why cross-compiling locally is usually slow.
+#
+# Go, Protobuf and Java toolchains are registered from MODULE.bazel
+# (register_toolchains / the go_sdk extension). Nothing needs to be declared
+# here for those languages.
+# ==============================================================================
+
+package(default_applicable_licenses = ["//:license"])
+
+platform(
+    name = "exec_linux_x86_64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    exec_properties = {
+        "container-image": "docker://golang:1.23-alpine",
+        "dockerNetwork": "standard",
+    },
+)
+
+platform(
+    name = "exec_linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+    ],
+    exec_properties = {
+        "container-image": "docker://golang:1.23-alpine",
+        "dockerNetwork": "standard",
+    },
+)
+
+platform(
+    name = "exec_macos_arm64",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+platform(
+    name = "exec_windows_x86_64",
+    constraint_values = [
+        "@platforms//os:windows",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+# Aggregate of every execution platform, for
+# `bazel query '//toolchains:exec_*'`.
+filegroup(
+    name = "exec_platforms",
+    srcs = [
+        ":exec_linux_arm64",
+        ":exec_linux_x86_64",
+        ":exec_macos_arm64",
+        ":exec_windows_x86_64",
+    ],
+)

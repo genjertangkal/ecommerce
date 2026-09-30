@@ -1,0 +1,32 @@
+# ==============================================================================
+# Deployable services
+# ==============================================================================
+# One entry per service. `commerce` exists today; the others are declared up
+# front so that a new service's team boundary is already defined.
+
+package_group(
+    name = "all",
+    packages = ["//services/..."],
+)
+
+package_group(
+    name = "commerce_services",
+    packages = ["//services/commerce/..."],
+)
+
+package_group(
+    name = "identity_services",
+    packages = ["//services/identity/..."],
+)
+
+package_group(
+    name = "fulfillment_services",
+    packages = ["//services/fulfillment/..."],
+)
+
+# The platform team may inspect every service, for example to attach a sidecar
+# or read a binary's stamp.
+package_group(
+    name = "service_binaries",
+    packages = ["//services/..."],
+)

@@ -1,0 +1,70 @@
+# gazelle:ignore
+
+# ==============================================================================
+# Commerce service - Product Catalog API
+# ==============================================================================
+# Layering, innermost first:
+#   internal/store    - persistence (the seam; in-memory for now)
+#   internal/service  - business rules, no transport knowledge
+#   internal/handler  - HTTP translation only
+#   cmd/product_catalog - wiring: composition root and process lifecycle
+#
+# The internal packages are visible only to //services/commerce:__subpackages__,
+# so nothing outside this service can reach them. Cross-team collaboration
+# happens through //proto contracts, which is what keeps the service
+# independently deployable.
+#
+# Hand-managed and ignored by Gazelle; see //proto/common for why both
+# `# gazelle:proto disable` and `# gazelle:ignore` are needed. The API contract
+# here is the same story as //proto/common and //proto/contracts.
+#
+# `package(default_visibility = ...)` is load-bearing here too: package() is not
+# inherited from the root BUILD file, so without it this package's targets are
+# private and the API contract is unusable by anyone.
+# ==============================================================================
+
+load("//build:macros.bzl", "proto_go", "proto_lib")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//teams:commerce"],
+)
+
+# -----------------------------------------------------------------------------
+# API contract
+# -----------------------------------------------------------------------------
+# strip_import_prefix matches the path used by the imports inside
+# product.proto ("common/common.proto", "contracts/contracts.proto").
+proto_lib(
+    name = "product_proto",
+    srcs = ["product.proto"],
+    strip_import_prefix = "/services/commerce",
+    deps = [
+        "//proto/common",
+        "//proto/contracts",
+    ],
+)
+
+proto_go(
+    name = "product_go_proto",
+    importpath = "github.com/ecommerce/genproto/ecommerce/services/commerce",
+    protos = [":product_proto"],
+    deps = [
+        "//proto/common:common_go_proto",
+        "//proto/contracts:contracts_go_proto",
+    ],
+)
+
+# -----------------------------------------------------------------------------
+# Service binary
+# -----------------------------------------------------------------------------
+# Defined in //services/commerce/cmd/product_catalog, next to the `package main`
+# sources it compiles.
+
+# -----------------------------------------------------------------------------
+# Container image
+# -----------------------------------------------------------------------------
+# Intentionally absent. `docker_image()` in //build:macros.bzl fails with an
+# explanation: rules_docker is unmaintained and absent from the Bazel Central
+# Registry, and rules_oci requires Bazel 8+ while this workspace pins 7.3.1.
+# Re-add the target once a container rule set is available.

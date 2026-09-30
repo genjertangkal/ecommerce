@@ -1,0 +1,122 @@
+name: bazel
+
+# The whole point of this workflow is to catch the class of failure where
+# `bazel run //:gazelle` silently rewrites a working BUILD file into one that no
+# longer loads. That happened repeatedly in this repository, and nothing caught
+# it: the file was only read by the *next* build, on someone's machine. The
+# `gazelle is idempotent` job below turns it into a build failure instead.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # A new Bazel release, or a rules_go/protobuf bump, changes what Gazelle and the
+  # rule sets do. Re-verify even without a code change.
+  schedule:
+    - cron: "37 4 * * 1"
+
+concurrency:
+  group: bazel-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: build, test and architecture policies
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: bazel-contrib/setup-bazel@0.15.0
+        with:
+          # .bazelversion pins 7.3.1; respect it rather than the runner default.
+          bazelisk-cache: true
+
+      - name: Configure BuildKit (for --disk_cache)
+        uses: docker/setup-buildx-action@v3
+
+      # --config=ci sets --repository_disable_download, which is only meaningful
+      # once every external repository is on disk. On a cold runner that flag
+      # alone fails the build, because the Go SDK, protoc and abseil still have
+      # to be fetched. Prefetch with the network available, then build with it
+      # switched off: that is what makes the hermetic claim testable.
+      - name: Prefetch external repositories
+        run: bazel fetch //...
+
+      - name: Build
+        run: bazel build //... --config=ci
+
+      - name: Test
+        run: bazel test //... --config=ci
+
+      # The four analysis-time policies in //bazel/aspects:aspects.bzl. These are
+      # pure analysis checks - no build actions - so they cost almost nothing and
+      # catch team-boundary leaks, non-public platform capabilities, cross-service
+      # imports and importpath drift.
+      - name: Architecture policies
+        run: bazel build //... --config=ci --config=lint
+
+  gazelle:
+    name: gazelle is idempotent
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: bazel-contrib/setup-bazel@0.15.0
+        with:
+          bazelisk-cache: true
+
+      - name: Fetch
+        run: bazel fetch //...
+
+      # Runs with the network disabled. If Gazelle cannot resolve an import
+      # offline it shells out to `go`, which reaches for github.com and fails
+      # here rather than in a developer's build.
+      - name: Run gazelle
+        run: bazel run //:gazelle --config=ci
+
+      # The actual assertion. A non-empty diff means Gazelle rewrote something:
+      # either a macro was renamed away from what defines it, a real `deps` entry
+      # was deleted, or a target name drifted from the convention Gazelle derives
+      # from the import path. All three have happened in this repository.
+      - name: Assert no BUILD file changed
+        run: |
+          if ! git diff --exit-code --stat; then
+            echo "::error::bazel run //:gazelle modified tracked files."
+            echo "Run 'bazel run //:gazelle' locally and commit the result."
+            exit 1
+          fi
+
+      - name: Assert build still works after regeneration
+        run: bazel build //... --config=ci
+
+  tidy:
+    name: workspace hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: bazel-contrib/setup-bazel@0.15.0
+        with:
+          bazelisk-cache: true
+
+      - name: MODULE.bazel.lock is current
+        run: |
+          bazel mod deps --lockfile_mode=update
+          if ! git diff --exit-code --stat -- MODULE.bazel.lock; then
+            echo "::error::MODULE.bazel.lock is stale. Run 'bazel mod tidy' and commit."
+            exit 1
+          fi
+
+      - name: go.mod is tidy
+        run: |
+          go mod tidy
+          if ! git diff --exit-code --stat -- go.mod go.sum; then
+            echo "::error::go.mod is not tidy. Run 'go mod tidy' and commit."
+            exit 1
+          fi

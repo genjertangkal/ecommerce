@@ -1,0 +1,69 @@
+# ==============================================================================
+# Ecommerce Bazel Monorepo - Bzlmod module definition
+# ==============================================================================
+# Dependency management is Bzlmod-only. There is intentionally no WORKSPACE
+# file: Bazel 7+ enables Bzlmod by default and Bazel 8 removes WORKSPACE
+# support entirely.
+# ==============================================================================
+
+module(
+    name = "ecommerce",
+    version = "0.1.0",
+)
+
+# -----------------------------------------------------------------------------
+# Direct dependencies
+# -----------------------------------------------------------------------------
+# Versions must equal what Minimal Version Selection actually resolves, not what
+# this module would prefer in isolation. gazelle pulls bazel_skylib@1.8.2 via
+# bazel_features and protobuf pulls rules_java@8.6.1, so declaring 1.6.0 / 8.5.1
+# here produced
+#   "the root module requires module version X, but got Y in the resolved graph"
+# on every single command. Declare the resolved version: the file then documents
+# what the build actually uses.
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "platforms", version = "1.0.0")
+
+# Language rules. Versions are pinned so that a `bazel mod upgrade` is the only
+# way to move them, which keeps builds reproducible.
+bazel_dep(name = "gazelle", version = "0.37.0")
+bazel_dep(name = "protobuf", version = "33.4")
+bazel_dep(name = "rules_go", version = "0.50.0")
+bazel_dep(name = "rules_java", version = "8.6.1")
+bazel_dep(name = "rules_license", version = "1.0.0")
+bazel_dep(name = "rules_proto", version = "7.1.0")
+bazel_dep(name = "rules_python", version = "1.7.0")
+bazel_dep(name = "rules_shell", version = "0.6.1")
+
+# -----------------------------------------------------------------------------
+# Go SDK
+# -----------------------------------------------------------------------------
+# rules_go 0.50.0 registers Go 1.21.8 as its default SDK, which is older than
+# the language version declared in go.mod. Pin the SDK explicitly so that
+# `go build`, `go test` and `bazel build` all agree on one toolchain, and so
+# that the SDK version cannot drift when rules_go is upgraded.
+go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
+go_sdk.download(
+    name = "go_sdk",
+    version = "1.23.6",
+)
+
+# `use_repo` is mandatory under Bzlmod: without it the repository is generated
+# but not visible to the main module, so labels such as `@go_sdk//:bin/gofmt`
+# fail to resolve.
+use_repo(go_sdk, "go_sdk")
+
+# -----------------------------------------------------------------------------
+# Go module dependencies
+# -----------------------------------------------------------------------------
+# `go_deps` reads go.mod and generates one Bazel repository per module require.
+# It is provided by *Gazelle*, not by rules_go: `@rules_go//go:extensions.bzl`
+# exports only `go_sdk`, so loading `go_deps` from there fails with "does not
+# export a module extension called go_deps". The attribute is `go_mod`, not
+# `go_mod_file`.
+go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
+go_deps.from_file(go_mod = "//:go.mod")
+
+# No `use_repo(go_deps, ...)` call yet: go.mod currently declares no external
+# modules, so the extension generates no repositories. Add one here as soon as
+# go.mod gains its first `require` directive, then run `bazel mod tidy`.

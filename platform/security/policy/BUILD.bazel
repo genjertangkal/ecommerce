@@ -1,0 +1,47 @@
+# ==============================================================================
+# Policy capability
+# ==============================================================================
+# `go_lib` with the capability tags spelled out, rather than the `policy_lib`
+# macro. The macro expands to exactly this target, and every check in
+# //bazel/aspects:aspects.bzl keys on the tags rather than the rule kind, so
+# nothing observable changes.
+#
+# `policy_lib` cannot be indexed by Gazelle: `config.KindMap` is keyed by the
+# builtin kind, so only one macro name per builtin is resolvable and `policy_lib`
+# would displace `go_lib`. Gazelle would then be unable to map an import of this
+# package to a label, silently delete the `deps` entry from importing packages
+# and shell out to `go` instead. See the Gazelle section in //BUILD.bazel.
+# ==============================================================================
+
+load("//build:macros.bzl", "filegroup_lib", "go_lib", "go_test_lib")
+
+go_lib(
+    name = "policy",
+    srcs = ["policy.go"],
+    importpath = "github.com/ecommerce/platform/security/policy",
+    tags = [
+        "capability=policy",
+        "decision_points=action_permission,resource_access",
+        "language=rego",
+        "layer=platform",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# The Rego source is shipped alongside the Go engine so that the policy and its
+# evaluator travel together.
+filegroup_lib(
+    name = "rego",
+    srcs = ["policy.rego"],
+    tags = ["language=rego"],
+)
+
+go_test_lib(
+    name = "policy_test",
+    size = "small",
+    srcs = ["policy_test.go"],
+    # The test asserts that the shipped Rego module is real Rego rather than Go
+    # source, so the .rego file has to be in the test's runfiles.
+    data = ["policy.rego"],
+    embed = [":policy"],
+)

@@ -1,0 +1,34 @@
+load("//build:macros.bzl", "config_struct", "filegroup_lib")
+
+package(default_applicable_licenses = ["//:license"])
+
+package_group(
+    name = "capabilities",
+    packages = ["//platform/observability/..."],
+)
+
+# `layer=platform` is what //bazel/aspects:aspects.bzl%platform_api_aspect keys
+# on: it requires the target to be visible to //teams:public. These aggregates
+# are consumable by every team, so they carry it too.
+filegroup_lib(
+    name = "observability",
+    srcs = [
+        "//platform/observability/logging",
+        "//platform/observability/metrics",
+        "//platform/observability/tracing",
+    ],
+    tags = [
+        "capability=logging",
+        "capability=metrics",
+        "capability=tracing",
+        "layer=platform",
+    ],
+)
+
+config_struct(
+    name = "config",
+    tags = [
+        "environment=production",
+        "service_name=ecommerce",
+    ],
+)

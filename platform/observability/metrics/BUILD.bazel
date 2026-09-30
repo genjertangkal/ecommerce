@@ -1,0 +1,36 @@
+# ==============================================================================
+# Metrics capability
+# ==============================================================================
+# `go_lib` with the capability tags spelled out, rather than the `metrics_lib`
+# macro. The macro expands to exactly this target, and every check in
+# //bazel/aspects:aspects.bzl keys on the tags rather than the rule kind, so
+# nothing observable changes.
+#
+# `metrics_lib` cannot be indexed by Gazelle: `config.KindMap` is keyed by the
+# builtin kind, so only one macro name per builtin is resolvable and
+# `metrics_lib` would displace `go_lib`. Gazelle would then be unable to map an
+# import of this package to a label, silently delete the `deps` entry from
+# importing packages and shell out to `go` instead. See the Gazelle section in
+# //BUILD.bazel.
+# ==============================================================================
+
+load("//build:macros.bzl", "go_lib", "go_test_lib")
+
+go_lib(
+    name = "metrics",
+    srcs = ["metrics.go"],
+    importpath = "github.com/ecommerce/platform/observability/metrics",
+    tags = [
+        "capability=metrics",
+        "layer=platform",
+        "service_name=ecommerce",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+go_test_lib(
+    name = "metrics_test",
+    size = "small",
+    srcs = ["metrics_test.go"],
+    embed = [":metrics"],
+)

@@ -1,0 +1,26 @@
+load("//build:macros.bzl", "go_lib", "go_test_lib")
+
+go_lib(
+    name = "store",
+    srcs = ["store.go"],
+    importpath = "github.com/ecommerce/services/commerce/internal/store",
+    tags = [
+        "layer=internal",
+        "team=commerce",
+    ],
+    # //services/commerce:__subpackages__ allows this package and its siblings
+    # (handler -> service -> store) but nothing else in the repository.
+    # //visibility:private would also work only if all three targets lived in
+    # one Bazel package, which they do not.
+    #
+    # Other teams consume the proto contract instead, which is what keeps this
+    # service independently deployable.
+    visibility = ["//services/commerce:__subpackages__"],
+)
+
+go_test_lib(
+    name = "store_test",
+    size = "small",
+    srcs = ["store_test.go"],
+    embed = [":store"],
+)

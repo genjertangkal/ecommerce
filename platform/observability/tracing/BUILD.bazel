@@ -1,0 +1,37 @@
+# ==============================================================================
+# Tracing capability
+# ==============================================================================
+# `go_lib` with the capability tags spelled out, rather than the `tracing_lib`
+# macro. The macro expands to exactly this target, and every check in
+# //bazel/aspects:aspects.bzl keys on the tags rather than the rule kind, so
+# nothing observable changes.
+#
+# `tracing_lib` cannot be indexed by Gazelle: `config.KindMap` is keyed by the
+# builtin kind, so only one macro name per builtin is resolvable and
+# `tracing_lib` would displace `go_lib`. Gazelle would then be unable to map an
+# import of this package to a label, silently delete the `deps` entry from
+# importing packages and shell out to `go` instead. See the Gazelle section in
+# //BUILD.bazel.
+# ==============================================================================
+
+load("//build:macros.bzl", "go_lib", "go_test_lib")
+
+go_lib(
+    name = "tracing",
+    srcs = ["tracing.go"],
+    importpath = "github.com/ecommerce/platform/observability/tracing",
+    tags = [
+        "capability=tracing",
+        "layer=platform",
+        "sampler_rate=0.1",
+        "service_name=ecommerce",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+go_test_lib(
+    name = "tracing_test",
+    size = "small",
+    srcs = ["tracing_test.go"],
+    embed = [":tracing"],
+)

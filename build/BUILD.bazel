@@ -1,0 +1,17 @@
+# ==============================================================================
+# Shared build macros
+# ==============================================================================
+# `exports_files` is what makes `load("//build:macros.bzl", ...)` work.
+#
+# Note: there is deliberately no `bzl_library` target here. A bzl_library's
+# `deps` must themselves be bzl_library targets, and neither @rules_go nor
+# @rules_proto exports one for their defs.bzl, so modelling macros.bzl's
+# external dependencies that way fails analysis with "target ... is not visible
+# from target '//build:macros'". To query who uses the macros, use:
+#
+#     bazel query 'rdeps(//..., //build:macros.bzl)'
+# ==============================================================================
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["macros.bzl"])

@@ -1,0 +1,16 @@
+load("//build:macros.bzl", "go_lib", "go_test_lib")
+
+go_lib(
+    name = "logging",
+    srcs = ["logging.go"],
+    importpath = "github.com/ecommerce/libs/go/logging",
+    tags = ["type=utility"],
+    visibility = ["//teams:public"],
+)
+
+go_test_lib(
+    name = "logging_test",
+    size = "small",
+    srcs = ["logging_test.go"],
+    embed = [":logging"],
+)

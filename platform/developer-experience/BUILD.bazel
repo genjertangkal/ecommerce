@@ -1,0 +1,78 @@
+# gazelle:ignore
+
+# ==============================================================================
+# Developer Experience platform capability
+# ==============================================================================
+# Provides the repository's developer CLI and the scaffolding templates used to
+# create a new service.
+#
+# `# gazelle:ignore` is required, not optional. Gazelle's model for a
+# `package main` directory is a `go_binary` that *embeds* a `go_library` which
+# holds the sources - see `generateLib`/`isCommand` in
+# gazelle/language/go/generate.go, which deliberately makes that library private
+# "by default". So on every run Gazelle split this file into a `go_lib` plus a
+# `go_bin` embedding it. Two targets in one Bazel package may not share a Go
+# import path, so the result failed to load, and the split also produced a
+# second, untested build of the CLI. Renaming the binary to match the directory
+# did not help; the split is structural.
+#
+# There is deliberately no second `go_library` over the same source. Two targets
+# in one Bazel package may not share a Go import path, so a second copy is both a
+# duplicate-package error and a second, untested build of the CLI.
+#
+# The devtool tags are spelled out rather than using the `devtool_bin` macro. The
+# macro expands to exactly this target, so nothing observable changes, and
+# `bazel query 'attr(tags, "type=devtool", //...)'` still finds the CLI. `devtool_bin`
+# additionally cannot be indexed by Gazelle, since `config.KindMap` is keyed by the
+# builtin kind and only one macro name per builtin is resolvable. See the Gazelle
+# section in //BUILD.bazel.
+# ==============================================================================
+
+load("//build:macros.bzl", "config_struct", "filegroup_lib", "go_bin", "template_dir")
+
+package(default_applicable_licenses = ["//:license"])
+
+go_bin(
+    name = "developer-experience",
+    srcs = ["ecommerce-cli.go"],
+    importpath = "github.com/ecommerce/platform/developer-experience",
+    tags = [
+        "binary=ecommerce",
+        "commands=build,deps,gazelle,lint,test",
+        "layer=platform",
+        "type=devtool",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# Stable, memorable label for the CLI, as used in //docs/bazel-foundation.md.
+# `alias`, not a second go_binary: two targets in one package may not share a Go
+# import path.
+alias(
+    name = "cli",
+    actual = ":developer-experience",
+    visibility = ["//visibility:public"],
+)
+
+# `path` is relative to this package, because native.glob is.
+template_dir(
+    name = "templates",
+    path = "templates",
+)
+
+# Targets for generating code and scaffolding new services. These carry
+# configuration in their tags; extend them as new templates are added.
+filegroup_lib(
+    name = "codegen",
+    tags = [
+        "languages=go,proto",
+    ],
+)
+
+config_struct(
+    name = "config",
+    tags = [
+        "default_language=go",
+        "enable_auto_format=true",
+    ],
+)

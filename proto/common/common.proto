@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package ecommerce.common;
+
+// Common types used across all services
+
+// Timestamp represents a point in time
+message Timestamp {
+  int64 seconds = 1;
+  int32 nanos = 2;
+}
+
+// Metadata contains request/response metadata
+message Metadata {
+  string request_id = 1;
+  string correlation_id = 2;
+  string user_id = 3;
+  map<string, string> custom = 4;
+}
+
+// Error represents an error response
+message Error {
+  string code = 1;
+  string message = 2;
+  map<string, string> details = 3;
+}
+
+// PaginationRequest represents pagination parameters
+message PaginationRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+// PaginationResponse represents pagination results
+message PaginationResponse {
+  int32 total_count = 1;
+  string next_page_token = 2;
+  bool has_more = 3;
+}
+
+// HealthCheckRequest represents a health check request
+message HealthCheckRequest {
+  string service = 1;
+}
+
+// HealthCheckResponse represents a health check response
+message HealthCheckResponse {
+  enum Status {
+    SERVING = 0;
+    NOT_SERVING = 1;
+    UNKNOWN = 2;
+  }
+  Status status = 1;
+  string message = 2;
+  map<string, string> details = 3;
+}

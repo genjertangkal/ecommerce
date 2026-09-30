@@ -1,0 +1,16 @@
+load("//build:macros.bzl", "go_lib", "go_test_lib")
+
+go_lib(
+    name = "errors",
+    srcs = ["errors.go"],
+    importpath = "github.com/ecommerce/libs/go/errors",
+    tags = ["type=utility"],
+    visibility = ["//teams:public"],
+)
+
+go_test_lib(
+    name = "errors_test",
+    size = "small",
+    srcs = ["errors_test.go"],
+    embed = [":errors"],
+)

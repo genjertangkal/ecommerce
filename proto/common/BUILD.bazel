@@ -1,0 +1,56 @@
+# gazelle:ignore
+
+# ==============================================================================
+# Common proto types shared by every service
+# ==============================================================================
+# Hand-managed, and explicitly ignored by Gazelle (`# gazelle:ignore`, above).
+# `# gazelle:proto disable` in //BUILD.bazel already stops the Protobuf extension
+# from generating or deleting proto rules, but that alone was not enough: with
+# `proto_lib` and `proto_go` unknown kinds, Gazelle's load fixer still appended
+#     load("@rules_go//proto:def.bzl", "go_proto_library")
+#     load("@rules_proto//proto:defs.bzl", "proto_library")
+# on every run, duplicating symbols this repository deliberately routes through
+# //build:macros.bzl. `gazelle:ignore` stops the file being touched at all.
+#
+# The two directives are both load-bearing and do different jobs:
+#   * `proto disable` keeps Gazelle from modelling the .proto layout - it drops
+#     `strip_import_prefix` and invents dependency labels such as
+#     `//common:common_proto`.
+#   * `ignore` keeps Gazelle from editing this file in any other way.
+#
+# `strip_import_prefix = "/proto"` is what makes this file's import path
+# "common/common.proto", which is the path //proto/contracts/contracts.proto
+# imports. Without it protoc would have to be handed "proto/common/common.proto"
+# and every cross-package import would break.
+#
+# The generated Go bindings deliberately do NOT mirror this path: they live
+# under //genproto, keyed by proto package, so generated and hand-written Go
+# code can never collide. //bazel/aspects:aspects.bzl%go_importpath_aspect
+# enforces that split.
+#
+# `package(default_visibility = ...)` is load-bearing. `package()` is NOT
+# inherited: a `//visibility:public` default in the root //BUILD.bazel says
+# nothing about //proto/common, which would otherwise be //visibility:private.
+# That is why `contracts_go_proto` could not depend on `common_go_proto` even
+# though the dependency is legitimate. Setting the default here means a target
+# added later without an explicit `visibility` is still consumable.
+# ==============================================================================
+
+load("//build:macros.bzl", "proto_go", "proto_lib")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//teams:public"],
+)
+
+proto_lib(
+    name = "common",
+    srcs = ["common.proto"],
+    strip_import_prefix = "/proto",
+)
+
+proto_go(
+    name = "common_go_proto",
+    importpath = "github.com/ecommerce/genproto/ecommerce/common",
+    protos = [":common"],
+)

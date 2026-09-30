@@ -1,0 +1,22 @@
+# ==============================================================================
+# Cross-cutting build policies
+# ==============================================================================
+# The aspect implementations live in aspects.bzl; this file exposes them as
+# build targets and models the .bzl file as a real dependency.
+#
+# Note: a .bzl file cannot instantiate a rule at top level. The build settings
+# that used to be declared at the top of aspects.bzl belong in a BUILD file,
+# which is why they live here now.
+# ==============================================================================
+
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["aspects.bzl"])
+
+bzl_library(
+    name = "aspects",
+    srcs = ["aspects.bzl"],
+    visibility = ["//visibility:public"],
+)

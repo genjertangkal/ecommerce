@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package ecommerce.contracts;
+
+import "common/common.proto";
+
+// Product service API contracts
+
+// Product represents a product in the catalog
+message Product {
+  string id = 1;
+  string sku = 2;
+  string name = 3;
+  string description = 4;
+  Price price = 5;
+  Inventory inventory = 6;
+  repeated string categories = 7;
+  map<string, string> attributes = 8;
+  common.Timestamp created_at = 9;
+  common.Timestamp updated_at = 10;
+}
+
+// Price represents a product price
+message Price {
+  int64 amount_cents = 1;
+  string currency = 2;
+}
+
+// Inventory represents product inventory
+message Inventory {
+  int32 available = 1;
+  int32 reserved = 2;
+  string warehouse_id = 3;
+}
+
+// GetProductRequest represents a request to get a product
+message GetProductRequest {
+  string product_id = 1;
+  common.Metadata metadata = 2;
+}
+
+// GetProductResponse represents a product response
+message GetProductResponse {
+  Product product = 1;
+  common.Metadata metadata = 2;
+}
+
+// ListProductsRequest represents a request to list products
+message ListProductsRequest {
+  common.PaginationRequest pagination = 1;
+  string category = 2;
+  string query = 3;
+  common.Metadata metadata = 4;
+}
+
+// ListProductsResponse represents a product list response
+message ListProductsResponse {
+  repeated Product products = 1;
+  common.PaginationResponse pagination = 2;
+  common.Metadata metadata = 3;
+}
+
+// CreateProductRequest represents a request to create a product
+message CreateProductRequest {
+  Product product = 1;
+  common.Metadata metadata = 2;
+}
+
+// CreateProductResponse represents a product creation response
+message CreateProductResponse {
+  Product product = 1;
+  common.Metadata metadata = 2;
+}
+
+// UpdateProductRequest represents a request to update a product
+message UpdateProductRequest {
+  string product_id = 1;
+  Product product = 2;
+  common.Metadata metadata = 3;
+}
+
+// UpdateProductResponse represents a product update response
+message UpdateProductResponse {
+  Product product = 1;
+  common.Metadata metadata = 2;
+}
+
+// DeleteProductRequest represents a request to delete a product
+message DeleteProductRequest {
+  string product_id = 1;
+  common.Metadata metadata = 2;
+}
+
+// DeleteProductResponse represents a product deletion response
+message DeleteProductResponse {
+  bool success = 1;
+  common.Metadata metadata = 2;
+}

@@ -1,0 +1,65 @@
+# ==============================================================================
+# Workspace status script
+# ==============================================================================
+# This is the only shell code in the repository, and it is on the critical path
+# of every single build: .bazelrc passes it to --workspace_status_command, so
+# Bazel runs it before analysing anything.
+#
+# It lives in a real Bazel package for that reason. A script referenced only by
+# path from .bazelrc is an undeclared build input - nothing tracks it, nothing
+# types it, and a regression in its output format would surface as a silently
+# mis-stamped binary rather than as a test failure.
+#
+# The macros come from //build:macros.bzl, which is also what makes this the
+# first real user of rules_shell; the sh_* macros there were previously defined
+# but never instantiated anywhere.
+# ==============================================================================
+
+load("//build:macros.bzl", "sh_bin", "sh_test_target")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//teams:platform"],
+)
+
+# Exported so that //:workspace_files can collect the stamping configuration in
+# one label. These are the build's own source files, not compiled outputs.
+#
+# workspace-status.sh is also the test's `data` dependency: the test reads its
+# stdout, so it needs the source file rather than the sh_binary launcher, which
+# is named after the target.
+exports_files([
+    "BUILD.bazel",
+    "workspace-status.sh",
+    "workspace-status_test.sh",
+])
+
+# For running it by hand: `bazel run //tools/dev:workspace-status`.
+sh_bin(
+    name = "workspace-status",
+    srcs = ["workspace-status.sh"],
+)
+
+# -----------------------------------------------------------------------------
+# Contract test
+# -----------------------------------------------------------------------------
+# Bazel parses this script's stdout as key/value pairs, and the rules for that
+# format are not enforced by the build - a violation is accepted and produces
+# wrong values. So they are asserted here instead. This test is the reason
+# //tools/dev exists as a package.
+#
+# It pins four things, three of which have been broken here before:
+#
+#   * the line grammar, so no value can span multiple lines (which is how
+#     STABLE_GIT_COMMIT once came out as the literal string "HEAD");
+#   * stable-versus-volatile classification, because getting it backwards is
+#     silent: a volatile key in a binary can report a stale commit;
+#   * that Bazel's own built-in keys are not re-emitted, which would duplicate
+#     a key and clobber the epoch-seconds BUILD_TIMESTAMP;
+#   * determinism, the property .bazelrc depends on when it turns on stamping.
+sh_test_target(
+    name = "workspace_status_contract_test",
+    size = "small",
+    srcs = ["workspace-status_test.sh"],
+    data = ["workspace-status.sh"],
+)

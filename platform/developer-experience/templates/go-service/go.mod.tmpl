@@ -1,0 +1,20 @@
+module {{.ModulePath}}
+
+go 1.23.0
+
+// This service lives inside the Ecommerce monorepo, so it normally has NO
+// go.mod of its own: the repository root is the single Go module
+// (github.com/ecommerce) and Bazel owns the build. This file is only here for
+// the case where a service must be extracted into its own repository.
+//
+// When extracted, add the platform capabilities it actually imports:
+//
+//	github.com/ecommerce/platform/observability/logging v0.1.0
+//	github.com/ecommerce/platform/observability/metrics  v0.1.0
+//	github.com/ecommerce/platform/observability/tracing  v0.1.0
+//	github.com/ecommerce/platform/security/auth        v0.1.0
+//	github.com/ecommerce/platform/security/secrets     v0.1.0
+//
+// Note that each capability is a separate module path: logging, metrics and
+// tracing used to be one `platform/observability` package, which rules_go
+// rejects because all three targets would resolve to the same Go import path.

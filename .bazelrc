@@ -1,0 +1,273 @@
+# ==============================================================================
+# Ecommerce Bazel Monorepo - .bazelrc
+# ==============================================================================
+# Layering:
+#   1. `common` / default sections  - settings every developer should get.
+#   2. `--config=` sections          - opt-in behaviour (ci, opt, cross, ...).
+#   3. `%workspace%/user.bazelrc`    - machine-local overrides (gitignored).
+#
+# Rules of thumb for this file:
+#   * Only set a flag if you know what Bazel 7.3.1 does with it. Flags are
+#     validated before anything else runs, so one typo bricks every command.
+#   * Never put two flags on one line when the first one takes a value: Bazel
+#     consumes the next token as that value, silently swallowing the flag.
+#   * `~` IS expanded in path-valued flags (verified on Bazel 7.3.1).
+# ==============================================================================
+
+# -----------------------------------------------------------------------------
+# Bzlmod
+# -----------------------------------------------------------------------------
+# Bzlmod is the only dependency mechanism. There is no WORKSPACE file in this
+# repository, so `--noenable_workspace` is belt-and-braces for Bazel 7.
+common --enable_bzlmod
+common --noenable_workspace
+
+# -----------------------------------------------------------------------------
+# Baseline correctness
+# -----------------------------------------------------------------------------
+build --announce_rc
+build --incompatible_strict_action_env
+
+# Required so that `--config=<os>` below is actually selected per host OS.
+build --enable_platform_specific_config
+
+# Fail on action-graph conflicts instead of silently picking one winner.
+build --experimental_strict_conflict_checks
+
+# -----------------------------------------------------------------------------
+# Local performance
+# -----------------------------------------------------------------------------
+build --jobs=auto
+
+# Leave headroom so that the machine stays usable (and swap-free) during builds.
+# (`--local_cpu_resources` / `--local_ram_resources` are deprecated in favour of
+# `--local_resources`.)
+build --local_resources=cpu=HOST_CPUS*.75
+build --local_resources=memory=HOST_RAM*.75
+
+# Content-addressed local disk cache. This is the single biggest win for
+# iteration speed; `~` is expanded by Bazel for path-valued flags.
+build --disk_cache=~/.cache/bazel/disk
+
+# Hardlink rather than copy on a repository-cache hit, to avoid duplicating
+# every downloaded SDK/toolchain.
+build --experimental_repository_cache_hardlinks
+
+build --remote_timeout=3600
+
+# Remote disk-cache configuration to opt into:
+#   --remote_cache=grpcs://bazel-cache.example.com
+#   --remote_upload_local_results=true
+#   --remote_download_outputs=all
+#   --remote_retries=3
+#
+# Pre-seeded archives for air-gapped builds:
+#   --distdir=~/.cache/bazel/dist
+
+# -----------------------------------------------------------------------------
+# Reproducibility
+# -----------------------------------------------------------------------------
+# --stamp links binaries to tools/dev/workspace-status.sh. Bazel splits that
+# script's output into stable-status.txt (keys beginning with STABLE_) and
+# volatile-status.txt (everything else), and treats the two very differently:
+# a change to the stable file invalidates stamped actions, whereas a change to
+# the volatile file is deliberately ignored, so a cache hit can hand back a
+# binary carrying a stale value.
+#
+# The script therefore keeps output deterministic - no timestamps, no hostname,
+# no username - and marks the git identity keys STABLE_ so that a new commit
+# or branch does invalidate. //tools/dev:workspace_status_contract_test asserts
+# all of that, so the guarantee is checked rather than merely intended.
+#
+# Two consequences of turning stamping on for *every* build, kept here
+# deliberately and worth knowing before changing either half:
+#
+#   * BUILD_HOST and BUILD_USER are built-in stable keys, so the action cache is
+#     keyed per machine and per user. A shared disk cache (see --disk_cache
+#     above) is therefore only useful on the machine that filled it.
+#   * Enabling stamping for local development rather than only for release is
+#     contrary to the usual advice, which is to stamp as late as possible and
+#     keep it off the developer path. Moving both lines into the `release`
+#     config below would follow that advice; it is left in place because
+#     changing it alters the build outputs every developer gets.
+build --stamp
+build --workspace_status_command=./tools/dev/workspace-status.sh
+
+# -----------------------------------------------------------------------------
+# Terminal output
+# -----------------------------------------------------------------------------
+build --color=yes
+build --curses=yes
+build --show_progress_rate_limit=30
+
+test --test_output=errors
+# Valid values: short, terse, detailed, none, testcase.
+test --test_summary=terse
+test --test_env=BAZEL_TEST=1
+
+# -----------------------------------------------------------------------------
+# Compilation modes
+# -----------------------------------------------------------------------------
+build:opt --compilation_mode=opt
+build:opt --strip=always
+
+build:dbg --compilation_mode=dbg
+build:dbg --copt=-g
+build:dbg --strip=never
+
+build:fast --compilation_mode=fastbuild
+
+# -----------------------------------------------------------------------------
+# Platform / execution configuration
+# -----------------------------------------------------------------------------
+# `linux` / `macos` / `windows` advertise the matching execution platform so
+# that remote execution can schedule actions on it. They deliberately do NOT
+# set `--platforms`: that would force every target (protoc, the Go SDK, ...)
+# to be built for a non-host platform on every local build. Use the explicit
+# `cross_*` configs below when you actually want to cross-compile.
+build:linux --extra_execution_platforms=//toolchains:exec_linux_x86_64
+build:macos --extra_execution_platforms=//toolchains:exec_macos_arm64
+build:windows --extra_execution_platforms=//toolchains:exec_windows_x86_64
+
+build:cross_linux_arm64 --platforms=//platforms:linux_arm64
+build:cross_linux_x86_64 --platforms=//platforms:linux_x86_64
+build:cross_macos_arm64 --platforms=//platforms:macos_arm64
+build:cross_macos_x86_64 --platforms=//platforms:macos_x86_64
+
+# Escape hatch for the hermetic default below.
+build:network --sandbox_default_allow_network=true
+
+# -----------------------------------------------------------------------------
+# C++ toolchain
+# -----------------------------------------------------------------------------
+# Building `protoc` (needed by go_proto_library) compiles abseil, which refuses
+# to build below C++17:
+#
+#     abseil-cpp~/absl/base/policy_checks.h:81:2: error: #error
+#     "C++ versions less than C++17 are not supported."
+#
+# Bazel's autodetected GCC toolchain still defaults to an older -std, so both the
+# target and host compilers need the standard raised. If you hit a new toolchain
+# that already defaults to C++17 or later, these become redundant but harmless.
+build --cxxopt=-std=c++17
+build --host_cxxopt=-std=c++17
+
+# -----------------------------------------------------------------------------
+# Protobuf
+# -----------------------------------------------------------------------------
+# Do not set `--proto_compiler` here. Under Bzlmod the `protobuf` module is
+# reachable as `@com_google_protobuf`, not `@protobuf`, and rules_proto already
+# selects the right protoc through its toolchain. Likewise do not set
+# `--experimental_proto_library_legacy_cc`: it no longer exists in
+# rules_proto 7.x, and leaving it out is what produces Go-only protos.
+
+# -----------------------------------------------------------------------------
+# Go
+# -----------------------------------------------------------------------------
+# The Go SDK version is pinned in MODULE.bazel through the `go_sdk` module
+# extension (currently 1.23.6), not here. The extension is the stronger guarantee:
+# `go build`, `go test` and `bazel build` then agree on one toolchain, and the
+# version cannot drift when rules_go is upgraded.
+#
+# NOTE: `//build:macros.bzl` already runs `go vet` as part of `go_library`, and
+# rules_go's bundled vettool is the correct one. Do NOT add a `--go_vet_args`
+# override pointing at a hand-rolled `@go_vet` repo, and note that
+# `$(location ...)` is not expanded inside an rc file.
+
+# -----------------------------------------------------------------------------
+# Race detector
+# -----------------------------------------------------------------------------
+# `-race` is a *build* mode, not a test argument. The detector instruments the
+# binary at compile time, and a Go test binary only accepts `-test.*` flags, so the
+# old
+#     test:go_race --test_arg=-race
+# failed every single test with
+#     flag provided but not defined: -race
+# The mode is rules_go's own `race` build setting, addressed through this
+# module's apparent repo name for it (`@rules_go`, because MODULE.bazel declares
+# `bazel_dep(name = "rules_go")` with no `repo_name` override).
+build:race --compilation_mode=dbg
+build:race --@rules_go//go/config:race
+
+# `--nocache_test_results` is test-only, so it lives in the `test:` section
+# rather than on the `build:race` lines. The two halves are kept together by
+# using the same config name in both sections, which Bazel applies together for
+# `bazel test` and `bazel build` respectively. A `test:race --config=race` line
+# would be a self-reference and Bazel rejects it with "Config expansion has a
+# cycle".
+test:race --nocache_test_results
+
+# `go_race` was the old, misleading name. Kept as a full alias - build settings
+# included - so that existing muscle memory and any runbook that says
+# `--config=go_race` still does the right thing; prefer `--config=race`.
+build:go_race --compilation_mode=dbg
+build:go_race --@rules_go//go/config:race
+
+test:go_race --nocache_test_results
+
+# -----------------------------------------------------------------------------
+# Architecture policies (aspects)
+# -----------------------------------------------------------------------------
+# Aspects are .bzl symbols, not targets, so they are addressed with the
+# `//<file.bzl>%<symbol>` syntax. These four checks are pure analysis-time
+# policies and cost no build actions.
+#
+#   team_boundary_aspect   - a target tagged team=X must not be visible outside X
+#   platform_api_aspect    - //platform targets must be visible to //teams:public
+#   service_isolation_aspect - services may not import other services' code
+#   go_importpath_aspect   - importpath must match the package path
+build:lint --aspects=//bazel/aspects:aspects.bzl%team_boundary_aspect,//bazel/aspects:aspects.bzl%platform_api_aspect,//bazel/aspects:aspects.bzl%service_isolation_aspect,//bazel/aspects:aspects.bzl%go_importpath_aspect
+
+# -----------------------------------------------------------------------------
+# Continuous integration
+# -----------------------------------------------------------------------------
+build:ci --color=no
+build:ci --curses=no
+build:ci --show_progress_rate_limit=10
+build:ci --show_timestamps
+
+# CI is fully hermetic: no repository downloads, no sandbox network.
+build:ci --repository_disable_download
+build:ci --sandbox_default_allow_network=false
+build:ci --disk_cache=~/.cache/bazel/disk
+
+# `--build_metadata` is only safe in CI; it embeds the build's identity into
+# every action key.
+build:ci --build_metadata=ROLE=CI
+
+test:ci --test_output=errors
+test:ci --test_summary=detailed
+
+# Retry-flaky detection. Note this conflicts with the (removed)
+# `--cache_test_results=no` setting: flaky attempts must re-run the test.
+test:ci --runs_per_test=2
+test:ci --flaky_test_attempts=3
+
+# Opt-in remote execution. `--remote_build_event_upload` takes a value, so it
+# must always be written with an explicit `=all` / `=minimal`.
+build:remote-exec --remote_executor=grpcs://bazel-executor.example.com
+build:remote-exec --remote_instance_name=projects/myproject/instances/default
+build:remote-exec --remote_build_event_upload=minimal
+build:remote-exec --remote_cache=grpcs://bazel-cache.example.com
+build:remote-exec --jobs=500
+
+# Build Event Service. Enable per-environment by uncommenting and filling in;
+# pointing it at a placeholder host makes every CI build fail to upload.
+# build:bes --build_event_json_file=/dev/stdout
+# build:bes --build_event_publish_level=everything
+# build:bes --bes_backend=grpcs://buildbuddy.example.com
+# build:bes --bes_results_url=https://buildbuddy.example.com/invocation/
+
+# -----------------------------------------------------------------------------
+# Convenience aliases
+# -----------------------------------------------------------------------------
+build:release --config=opt
+build:release --define=release=true
+
+build:dev --config=fast
+build:dev --define=dev=true
+
+# -----------------------------------------------------------------------------
+# Machine-local overrides (gitignored)
+# -----------------------------------------------------------------------------
+try-import %workspace%/user.bazelrc

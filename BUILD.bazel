@@ -1,0 +1,222 @@
+# ==============================================================================
+# Ecommerce Monorepo - Root BUILD.bazel
+# ==============================================================================
+# Workspace-wide package groups, license declaration and Gazelle wiring.
+# ==============================================================================
+
+# -----------------------------------------------------------------------------
+# Gazelle configuration
+# -----------------------------------------------------------------------------
+# `bazel run //:gazelle` regenerates BUILD files and maps Go imports onto Bazel
+# labels. These directives scope what it may touch; all of them apply to this
+# directory and every subdirectory.
+#
+# `# gazelle:prefix` declares the import path that corresponds to this
+# repository root. It must match the `module` line in go.mod. Without it Gazelle
+# cannot tell that an import such as
+# `github.com/ecommerce/services/commerce/internal/store` lives in this
+# repository, so it shells out to `go`, which tries to reach github.com over the
+# network and fails:
+#     gazelle: finding module path for import github.com/ecommerce/... :
+#     git ls-remote ... fatal: could not read Username for 'https://github.com'
+# That made `bazel run //:gazelle` non-hermetic (it fails outright under
+# --config=ci) and slow. Declaring the prefix keeps it offline.
+#
+# `# gazelle:map_kind` teaches Gazelle that this repository's macros expand to
+# the rules it already knows. Gazelle does not expand macros: it matches rule
+# *kinds* against a fixed list (`go_library`, `go_test`, `go_binary`,
+# `go_proto_library`, ...). A target written as `go_lib(...)` was therefore
+# invisible to Gazelle, which had two consequences, both observed here:
+#
+#   1. Gazelle could not index it, so it could not resolve an import of it and
+#      fell through to the network lookup described above. `bazel run //:gazelle`
+#      silently failed to add a `deps` entry for a *new* import, so the very
+#      command meant to keep BUILD files in sync left them broken.
+#   2. Gazelle generated a second, raw `go_library` beside each macro. Two targets
+#      in one Bazel package may not share a Go import path, so that copy had to
+#      carry no `deps` and then failed to compile with
+#      "missing strict dependencies". The stray `*_lib` targets that used to sit
+#      next to `go_service`, `devtool_bin` and `go_lib` were Gazelle's output, not
+#      hand-written code - deleting them was not enough, `bazel run //:gazelle`
+#      recreated them within minutes.
+#
+# The syntax is `# gazelle:map_kind <from_kind> <to_kind> <load_file>`, where
+# <from_kind> is the kind Gazelle knows natively, <to_kind> is the name written
+# into BUILD files, and <load_file> is the .bzl Gazelle attributes the generated
+# `load()` to.
+#
+# Two things about map_kind are easy to get wrong, and both were wrong here.
+#
+# 1. <load_file> must be the .bzl that actually defines <to_kind>, which for
+#    every macro in this repository is `//build:macros.bzl`. It was
+#    `@rules_go//go:def.bzl`, so Gazelle emitted
+#        load("@rules_go//go:def.bzl", "go_bin")
+#    and rules_go exports no such symbol. Gazelle never checks that the symbol
+#    exists, so a working BUILD file silently became an unloadable one on the
+#    next `bazel run //:gazelle`.
+#
+# 2. Gazelle can only *index* one macro name per builtin kind, and the
+#    constraints collide here. `config.KindMap` is keyed by FromKind, so
+#    `map_kind go_library X` can appear only once, yet `metaResolver.Resolver`
+#    selects an entry by comparing `mappedKind.KindName` against the rule's kind.
+#    So a Go library is indexable under exactly one of `go_lib`, `logging_lib`,
+#    `metrics_lib`, `tracing_lib`, `auth_lib`, `secrets_lib`, `policy_lib` - not
+#    all seven. Whichever loses cannot be indexed, and then Gazelle cannot map
+#    an import of it to a label.
+#
+# 3. An unindexable library is worse than a rewritten one. In a package Gazelle
+#    manages, a missing index makes it silently *delete* the corresponding
+#    `deps` entry rather than error, and then shell out to `go` to ask about the
+#    import:
+#        gazelle: finding module path for import
+#        github.com/ecommerce/platform/observability/logging: go: -d flag is ...
+#    That both breaks compilation (the dependency is gone) and makes the command
+#    non-hermetic, so it fails outright under --config=ci.
+#
+# The resolution: the Go libraries in this repository all use `go_lib`, which is
+# the one name Gazelle can both write and index. The platform capability macros
+# (logging_lib, metrics_lib, ...) add nothing to the target except `tags` - and
+# every check in //bazel/aspects:aspects.bzl keys on those tags, not on the rule
+# kind - so //platform/* spells the same tags out explicitly on a `go_lib`. The
+# resulting targets are identical: same rule, same importpath, same visibility,
+# same tags.
+#
+# The capability macros remain defined in //build:macros.bzl for packages that
+# are `# gazelle:ignore`d and therefore need no index. See their docstrings.
+# -----------------------------------------------------------------------------
+# gazelle:prefix github.com/ecommerce
+# gazelle:proto disable
+# gazelle:go_generate_proto false
+
+# The three shapes Gazelle owns outright. `go_lib`, `go_bin` and `go_test_lib`
+# are thin wrappers over `go_library`, `go_binary` and `go_test` that add only
+# tags, an importpath and a visibility, all of which Gazelle already understands,
+# so these one-way mappings are exact in both directions: Gazelle writes this
+# name, and Gazelle can index a rule that already uses it.
+#
+# Note the direction on the test entry. Gazelle understands `go_test`, so it is
+# `go_test_lib` that has to be taught what it is. Mapping `go_test_lib -> go_test`
+# instead makes lookupMapKindReplacement walk in a circle and every Gazelle run
+# aborts with
+#     found loop of map_kind replacements: go_test -> go_test_lib -> go_test
+# gazelle:map_kind go_library go_lib //build:macros.bzl
+# gazelle:map_kind go_binary go_bin //build:macros.bzl
+# gazelle:map_kind go_test go_test_lib //build:macros.bzl
+
+# There is deliberately no map_kind for logging_lib, metrics_lib, tracing_lib,
+# auth_lib, secrets_lib, policy_lib, devtool_bin, go_service, proto_lib or
+# proto_go. See point 2: each would displace one of the three above from the
+# index, and the losing name becomes unresolvable.
+
+# -----------------------------------------------------------------------------
+# Gazelle
+# -----------------------------------------------------------------------------
+# `bazel run //:gazelle` regenerates BUILD files and maps Go imports onto Bazel
+# labels. `gazelle_binary.languages` takes go_library labels that export
+# `NewLanguage`, not language-name strings.
+load("@gazelle//:def.bzl", "gazelle", "gazelle_binary")
+
+# -----------------------------------------------------------------------------
+# License compliance
+# -----------------------------------------------------------------------------
+# Use the canonical SPDX kinds shipped by rules_license rather than hand-rolling
+# `license_kind` targets: a LICENSE file has exactly ONE license, so listing
+# several kinds here (as this repo used to) mislabels the project.
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    # Inherit the license declared below. Repeat
+    # `default_applicable_licenses = ["//:license"]` in a package only when it
+    # ships a *different* license than the workspace default.
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    package_name = "ecommerce",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+    license_text = "LICENSE",
+    package_version = "0.1.0",
+)
+
+# Note: there used to be a second `license(name = "licenses")` here "retained for
+# backwards compatibility". Two license targets describing one LICENSE file are
+# two things that can drift, and nothing referenced the plural form any more.
+# It has been removed rather than kept as a second source of truth.
+
+gazelle_binary(
+    name = "gazelle_bin",
+    languages = [
+        "@gazelle//language/proto:go_default_library",
+        "@gazelle//language/go:go_default_library",
+    ],
+)
+
+gazelle(
+    name = "gazelle",
+    gazelle = ":gazelle_bin",
+)
+
+# -----------------------------------------------------------------------------
+# Workspace-wide package groups
+# -----------------------------------------------------------------------------
+# There are none here, deliberately.
+#
+# This file used to declare seven of them - all_packages, platform_packages,
+# libs_packages, proto_packages, services_packages, teams_packages and
+# tools_packages - and nothing referenced a single one. They were also a second
+# source of truth: //teams/BUILD.bazel already owns visibility for the whole
+# repository, and `all_packages` was a verbatim duplicate of //teams:all. A
+# visibility group that two files both define is a group that can drift.
+#
+# To add a visibility boundary, add it to //teams/BUILD.bazel. That is the only
+# place a team, a layer or a shared surface is declared, which is what makes
+# `bazel query 'rdeps(//..., //teams:commerce)'` a complete answer.
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Repository metadata
+# -----------------------------------------------------------------------------
+# A single label for the files that define the build itself, so a packaging or
+# release job can collect the workspace's configuration in one dependency
+# instead of hard-coding a file list.
+filegroup(
+    name = "workspace_files",
+    srcs = [
+        ".bazelignore",
+        ".bazelrc",
+        ".bazelversion",
+        ".gitignore",
+        ".github/workflows/bazel.yml",
+        "BUILD.bazel",
+        "LICENSE",
+        "MODULE.bazel",
+        "MODULE.bazel.lock",
+        "README.md",
+        "docs/bazel-foundation.md",
+        "go.mod",
+        # The stamping script and its contract test. Both are listed because the
+        # script runs on every build via --workspace_status_command, so a change
+        # to it changes every stamped artifact and belongs in the same review as
+        # a change to .bazelrc. These are cross-package labels, not paths:
+        # //tools/dev is a Bazel package, so a root filegroup may not name its
+        # files as //:tools/dev/...
+        "//tools/dev:BUILD.bazel",
+        "//tools/dev:workspace-status.sh",
+        "//tools/dev:workspace-status_test.sh",
+    ],
+    visibility = ["//teams:platform"],
+)
+
+exports_files([
+    "LICENSE",
+    ".bazelrc",
+    ".bazelversion",
+    ".bazelignore",
+    "go.mod",
+])
+
+# Note: there is deliberately no `//:default` target. An alias cannot expand to
+# `//...`, and aliasing a `package_group` yields a target that cannot be built.
+# Use `bazel build //...` and `bazel test //...` instead.

@@ -1,0 +1,38 @@
+# gazelle:ignore
+
+# ==============================================================================
+# Service API contracts
+# ==============================================================================
+# Hand-managed and ignored by Gazelle; see //proto/common for why both
+# `# gazelle:proto disable` and `# gazelle:ignore` are needed.
+#
+# contracts.proto imports "common/common.proto", which resolves because
+# //proto/common:common sets strip_import_prefix = "/proto".
+#
+# `package(default_visibility = ...)` here for the same reason as
+# //proto/common: package() does not inherit, so without it this package's
+# targets would be private and nothing could consume the contract.
+# ==============================================================================
+
+load("//build:macros.bzl", "proto_go", "proto_lib")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//teams:public"],
+)
+
+proto_lib(
+    name = "contracts",
+    srcs = ["contracts.proto"],
+    strip_import_prefix = "/proto",
+    deps = ["//proto/common"],
+)
+
+proto_go(
+    name = "contracts_go_proto",
+    importpath = "github.com/ecommerce/genproto/ecommerce/contracts",
+    protos = [":contracts"],
+    # The generated Go bindings for imported protos must be depended on
+    # explicitly: go_proto_library does not derive them from the .proto import.
+    deps = ["//proto/common:common_go_proto"],
+)

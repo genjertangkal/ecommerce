@@ -1,0 +1,59 @@
+# Directories that must never be traversed as Bazel packages.
+#
+# IMPORTANT: this file is parsed by Gazelle as well as Bazel, and Gazelle
+# rejects glob patterns outright:
+#     gazelle: the .bazelignore exclusion pattern must not be a glob bazel-*
+# Every pattern below is therefore a literal. The globs that were here before
+# (`bazel-*`, `*.swp`, `*.swo`, `*~`, `*.tmp`, `*.log`, `*.profraw`, `*.pyc`,
+# `*.pyo`, `*.pyd`, `*.local.bazelrc`) are valid for Bazel but produced eleven
+# errors on every `bazel run //:gazelle` - enough noise to bury a real failure.
+# None of them were load-bearing:
+#
+#   * Bazel already refuses to traverse its own convenience symlinks
+#     (bazel-out, bazel-bin, bazel-testlogs, bazel-<workspace>), so listing them
+#     explicitly is belt-and-braces. They are still listed, by name, because the
+#     literal form is the only one both tools accept.
+#   * The rest are single-file artefacts (editor swaps, logs, bytecode). A file
+#     with no BUILD file in its directory cannot become a Bazel package, so
+#     ignoring them buys nothing.
+#
+# If you need a new exclusion, add the literal path. Do not add a glob.
+bazel-bin
+bazel-out
+bazel-testlogs
+bazel-ecommerce
+
+# Version control and editor state.
+.git
+.gitignore
+.idea
+.vscode
+
+# OS metadata.
+.DS_Store
+Thumbs.db
+
+# Build and packaging output.
+dist
+out
+tmp
+temp
+
+# Test and profiling output.
+test-results
+coverage
+logs
+
+# Third-party dependency trees.
+node_modules
+vendor
+__pycache__
+
+# Local Bazel state.
+.bazel
+user.bazelrc
+local.bazelrc
+
+# Generated documentation.
+docs/_build
+site

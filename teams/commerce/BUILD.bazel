@@ -1,0 +1,49 @@
+# ==============================================================================
+# Commerce team private package
+# ==============================================================================
+# Everything here is visible to //teams:commerce (and //teams:platform) only.
+# Nothing outside the team may depend on it: another team is expected to consume
+# the API through //proto/contracts, not by importing team internals.
+#
+# This package is also the executable documentation for the visibility model.
+# `bazel build //... --config=lint` fails if a target tagged `team=commerce`
+# ever gains a wider visibility than //teams:commerce.
+#
+# The library is named `commerce`, matching the last element of the package's Go
+# import path, which is the name Gazelle derives on its own. It used to be called
+# `commerce_utils`, and Gazelle then added a *second* `go_lib`/`go_test_lib` pair
+# over the same sources and the same import path on every run - two targets in
+# one Bazel package may not share a Go import path, so the copy failed with
+# "import path github.com/ecommerce/teams/commerce is ambiguous". Renaming the
+# target is what makes `bazel run //:gazelle` a no-op here.
+# ==============================================================================
+
+load("//build:macros.bzl", "go_lib", "go_test_lib", "team_boundary")
+
+go_lib(
+    name = "commerce",
+    srcs = ["commerce_utils.go"],
+    importpath = "github.com/ecommerce/teams/commerce",
+    tags = [
+        "team=commerce",
+        "type=utility",
+    ],
+    visibility = ["//teams:commerce"],
+)
+
+go_test_lib(
+    name = "commerce_test",
+    size = "small",
+    srcs = ["commerce_utils_test.go"],
+    embed = [":commerce"],
+)
+
+# A team-private marker, wrapped so the boundary is explicit in the target graph
+# rather than implied only by a visibility list.
+team_boundary(
+    name = "internal",
+    srcs = [":commerce"],
+    public_api = False,
+    tags = ["layer=internal"],
+    team = "commerce",
+)
